@@ -427,9 +427,20 @@ ENDMACRO
 \
 \ENDIF
 \
+\IF _INTERLACE_FIX
+\
+\LDA #144               \ Call OSBYTE with A = 144, X = 255 and Y set to the
+\LDX #255               \ current interlace setting (which the MOS stores at
+\LDY &0291              \ &0291), so this moves the screen down one line but
+\JSR OSBYTE             \ without changing the interlace
+\
+\ELSE
+\
 \LDA #144               \ Call OSBYTE with A = 144, X = 255 and Y = 0 to move
 \LDX #255               \ the screen down one line and turn screen interlace on
 \JSR OSB
+\
+\ENDIF
 
                         \ --- And replaced by: -------------------------------->
 
@@ -619,6 +630,29 @@ ENDMACRO
 \JSR MVBL               \ Call MVBL to move and decrypt 8 pages of memory from
 \                       \ DIALS to &7800-&7FFF
 \
+\IF _INTERLACE_FIX
+\
+\LDA &0291              \ If interlace is on then the MOS will have set &0291 to
+\BEQ lace1              \ zero, so jump to lace1 to skip the following
+\
+\                       \ If we get here then interlace is off, so we modify the
+\                       \ split-screen interrupt timer from (57 30) to (56 222)
+\                       \ to ensure a clean transition between the space view
+\                       \ and dashboard, using figures derived by Patrick Moore
+\
+\LDA #222               \ Modify the LDA #30 instruction in LINSCN to LDA #222
+\STA LINSCN+1           \ to change the low-order T1 count to 222
+\
+\LDA #56                \ Modify the LDA #VSCAN instruction in LINSCN to LDA #56
+\STA LINSCN+8           \ to change the high-order T1 count to 56
+\
+\STA lace2+1            \ Modify the LDA #VSCAN instruction at lace2 to LDA #56
+\                       \ to change the high-order T1 count to 56
+\
+\.lace1
+\
+\ENDIF
+\
 \SEI                    \ Disable interrupts while we set up our interrupt
 \                       \ handler to support the split-screen mode
 \
@@ -646,6 +680,12 @@ ENDMACRO
 \STA IRQ1V              \ interrupt handler
 \LDA #HI(IRQ1)
 \STA IRQ1V+1
+\
+\IF _INTERLACE_FIX
+\
+\.lace2
+\
+\ENDIF
 \
 \LDA #VSCAN             \ Set 6522 System VIA T1C-L timer 1 high-order counter
 \STA VIA+&45            \ (SHEILA &45) to VSCAN (57) to start the T1 counter
@@ -1282,7 +1322,7 @@ ENDIF
 \                       \ in the docked file we just loaded, in the byte before
 \                       \ the ship hangar blueprints at XX21
 \
-\IF _REMOVE_CHECKSUMS
+\IF _REMOVE_CHECKSUMS OR _INTERLACE_FIX
 \
 \NOP                    \ If we have disabled checksums, then ignore the result
 \NOP                    \ of the checksum comparison
